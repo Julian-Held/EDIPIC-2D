@@ -189,7 +189,7 @@ SUBROUTINE PERFORM_ION_NEUTRAL_COLLISION
 
           if (ngas_m3.ge.2E21) then ! more than about 8 Pa? ... 
             if ((delta_t_s*T_cntr).le.6E-6) then ! ... then first have it running at lower collision probability for some time for faster convergence.
-              p_col = ((delta_t_s*T_cntr)/6E-6) * p_col + p_col/ngas_m3 * 1E21 * (1 - (delta_t_s*T_cntr)/10E-6)  ! linear increase to final collision probability over time
+              p_col = ((delta_t_s*T_cntr)/6E-6) * p_col + p_col/ngas_m3 * 1E21 * (1 - (delta_t_s*T_cntr)/6E-6)  ! linear increase to final collision probability over time
             end if
           end if
       ! <------------------- end project specific adjustments --------------------------->
