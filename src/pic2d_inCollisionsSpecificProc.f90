@@ -31,7 +31,7 @@ subroutine calculate_thermal_cx_probab
 
 end subroutine calculate_thermal_cx_probab
 
-!------------------------------------------------------------------------- 
+!-------------------------------------------------------------------------
 !
 real(8) function sigma_rcx_m2(energy_eV, sigma_m2_1eV, alpha)
 
@@ -64,7 +64,7 @@ subroutine PERFORM_RESONANT_CHARGE_EXCHANGE
 
 ! functions
   real(8) neutral_density_normalized, sigma_rcx_m2
-  
+
   if (no_in_collisions) return
 
 ! clear collision counters
@@ -95,7 +95,7 @@ subroutine PERFORM_RESONANT_CHARGE_EXCHANGE
         vz = ion(s)%part(i)%VZ
         vsq = vx**2 + vy**2 +vz**2
         energy_eV = vsq * factor_eV
-        vabs_ms = sqrt(vsq) * V_scale_ms 
+        vabs_ms = sqrt(vsq) * V_scale_ms
 
         probab_rcx = prob_factor * vabs_ms * sigma_rcx_m2(energy_eV, sigma_m2_1eV, alpha)
         probab_rcx = neutral_density_normalized(n, ion(s)%part(i)%x, ion(s)%part(i)%y) * sqrt(probab_rcx**2 + probab_rcx_therm_2)  ! account for the nonuniform density and the low-energy correction
@@ -112,7 +112,7 @@ subroutine PERFORM_RESONANT_CHARGE_EXCHANGE
 !        else
       end if
     END DO
-  END DO   
+  END DO
 
 END SUBROUTINE PERFORM_RESONANT_CHARGE_EXCHANGE
 
@@ -120,38 +120,39 @@ END SUBROUTINE PERFORM_RESONANT_CHARGE_EXCHANGE
 SUBROUTINE PERFORM_ION_NEUTRAL_COLLISION
   ! Julian Held, j.held@tue.nl, 2025
   ! After: Nanbu and Kitatani: J. Phys. D: Appl. Phys. 28 (1995) 324-330
-  
+
     USE MCCollisions
     USE IonParticles
     USE CurrentProblemValues, ONLY : energy_factor_eV, delta_t_s, N_subcycles, V_scale_ms, T_cntr, pi, e_Cl, true_eps_0_Fm, amu_kg, kB_JK, T_e_eV, N_max_vel
     USE rng_wrapper
     !use stdlib_specialfunctions_gamma, only: gamma
-  
+    USE Checkpoints, ONLY use_checkpoint  ! 0/1/2 = don't use / use to continue older run / use to start a new run
+
     IMPLICIT NONE
     INCLUDE 'mpif.h'
-  
-  
+
+
     INTEGER s, n, i
     INTEGER ierr
     LOGICAL CX ! did charge exchange occur?
     real(8) vfactor, ngas_m3
-  
+
     real(8) vx, vy, vz, vx_, vy_, vz_, Ekin, vr_ms
     real(8) vxn, vyn, vzn, vxn_, vyn_, vzn_ ! neutral velocities before and after
     real(8) Rx, Ry, Rz
     real(8) gx, gy, gz, g, g_perp, hx, hy, hz
     real(8) Mi, Mn
     real(8) E_ratio, E_ratio_ion
-  
+
     real(8) neutral_density_normalized ! function
-  
+
     real(8) beta_inf, alpha0, q, mr, beta_cx
     real(8) sigmaL, sigmaP, sigmaT, sigma_cx, d0, a, Acx
     real(8) p_col, bmax_col, bmax_cx, bmax, b
     real(8) xi0, xi1, xi, chi, beta, beta0, theta, theta0, Fel, dtheta
     real(8) cos_chi, sin_chi, phi_ang
-  
-    beta0 = 1.001 ! beta > beta0 -> spiraling 
+
+    beta0 = 1.001 ! beta > beta0 -> spiraling
 
     if (no_in_collisions) return
 
@@ -169,35 +170,37 @@ SUBROUTINE PERFORM_ION_NEUTRAL_COLLISION
         alpha0 = neutral(n)%alpha * 1D-30 ! polarizability of neutral
         Acx = neutral(n)%Axc ! resonant charge exchange parameter (check for same species later)
         Mn = neutral(n)%M_amu * amu_kg
-        vfactor = SQRT(neutral(n)%T_K * kB_JK / (T_e_eV * e_Cl * Ms(s))) / DBLE(N_max_vel) 
+        vfactor = SQRT(neutral(n)%T_K * kB_JK / (T_e_eV * e_Cl * Ms(s))) / DBLE(N_max_vel)
 
-        q = Qs(s) * e_Cl 
+        q = Qs(s) * e_Cl
         Mi = M_i_amu(s) * amu_kg
-        mr = Mi*Mn/(Mi+Mn) 
-    
+        mr = Mi*Mn/(Mi+Mn)
+
         DO i = 1, N_ions(s)
           CX = .False.
           a = alpha0 * (q**2) / (2.0*(4.0*pi*true_eps_0_Fm))
           p_col = ngas_m3 * sqrt(8.0*a/mr) * pi * (beta_inf**2) * delta_t_s * N_subcycles * neutral_density_normalized(n, ion(s)%part(i)%x, ion(s)%part(i)%y)
-    
-          ! <-------------------- probe project specific adjustments ------------------------>
-          if (ngas_m3.le.5E20) then ! less than about 2 Pa? ... 
-            if ((delta_t_s*T_cntr).le.10E-6) then ! ... then first have it running at higher collision probability for some time to remove waves.
-              p_col = ((delta_t_s*T_cntr)/10E-6) * p_col + p_col/ngas_m3 * 5E20 * (1 - (delta_t_s*T_cntr)/10E-6) ! linear decrease to final collision probability over time
-            end if
-          end if
 
-          if (ngas_m3.ge.2E21) then ! more than about 8 Pa? ... 
-            if ((delta_t_s*T_cntr).le.6E-6) then ! ... then first have it running at lower collision probability for some time for faster convergence.
-              p_col = ((delta_t_s*T_cntr)/6E-6) * p_col + p_col/ngas_m3 * 1E21 * (1 - (delta_t_s*T_cntr)/6E-6)  ! linear increase to final collision probability over time
+          ! <-------------------- probe project specific adjustments ------------------------>
+          if (use_checkpoint.ne.2) then ! all this only makes sense if we are not starting from a checkpoint
+            if (ngas_m3.le.5E20) then ! less than about 2 Pa? ...
+                if ((delta_t_s*T_cntr).le.10E-6) then ! ... then first have it running at higher collision probability for some time to remove waves.
+                p_col = ((delta_t_s*T_cntr)/10E-6) * p_col + p_col/ngas_m3 * 5E20 * (1 - (delta_t_s*T_cntr)/10E-6) ! linear decrease to final collision probability over time
+                end if
             end if
-          end if
+
+            if (ngas_m3.ge.2E21) then ! more than about 8 Pa? ...
+                if ((delta_t_s*T_cntr).le.6E-6) then ! ... then first have it running at lower collision probability for some time for faster convergence.
+                p_col = ((delta_t_s*T_cntr)/6E-6) * p_col + p_col/ngas_m3 * 1E21 * (1 - (delta_t_s*T_cntr)/6E-6)  ! linear increase to final collision probability over time
+                end if
+            end if
+        end if
       ! <------------------- end project specific adjustments --------------------------->
-    
+
           if (well_random_number().le.p_col) then ! perform collision
             collision_rcx(s)%counter = collision_rcx(s)%counter + 1
             beta = beta_inf * sqrt(well_random_number())
-    
+
             ! create a virtual neutral particle
             call GetMaxwellVelocity(vxn)
             call GetMaxwellVelocity(vyn)
@@ -205,31 +208,31 @@ SUBROUTINE PERFORM_ION_NEUTRAL_COLLISION
             vxn = vxn * vfactor * V_scale_ms
             vyn = vyn * vfactor * V_scale_ms
             vzn = vzn * vfactor * V_scale_ms
-      
+
             vx = ion(s)%part(i)%VX * V_scale_ms
             vy = ion(s)%part(i)%VY * V_scale_ms
             vz = ion(s)%part(i)%VZ * V_scale_ms
-      
+
             ! relative velocity between colliding particles
             gx = vxn-vx
             gy = vyn-vy
             gz = vzn-vz
             g = sqrt((gx)**2 + (gy)**2 + (gz)**2)
             g_perp = sqrt(gy**2 + gz**2)
-    
+
             Ekin = 0.5 * mr * g**2
             beta_cx = Acx * (Ekin/e_Cl)**(0.25)
-    
+
             phi_ang = 2.0*pi*well_random_number()
             hx = g_perp * cos(phi_ang)
-            hy = -(gy*gx*cos(phi_ang) + g*gz*sin(phi_ang)) / g_perp                                                
+            hy = -(gy*gx*cos(phi_ang) + g*gz*sin(phi_ang)) / g_perp
             hz = -(gz*gx*cos(phi_ang) - g*gy*sin(phi_ang)) / g_perp
-    
+
             if (beta.GE.beta0) then ! beta > 1 ->  polarization scattering and maybe CX
               xi0 = sqrt(beta**2 - sqrt(beta**4 - 1))
               xi1 = sqrt(beta**2 + sqrt(beta**4 - 1))
               xi = xi0/xi1
-    
+
               ! find scattering angle chi
               if (beta.LE.3) then
                 Fel = neutral(n)%Fel_precalc( nint(xi*(50000.0-1.0)) )
@@ -238,10 +241,10 @@ SUBROUTINE PERFORM_ION_NEUTRAL_COLLISION
               else
                 chi = -(3.0*pi/16.0)*beta**(-4)
               end if
-    
+
               cos_chi = cos(chi)
               sin_chi = abs(sin(chi))
-              
+
               ! post-collision velocities
               vx_ =  vx +  Mn/(Mi + Mn) * (gx*(1-cos_chi) + hx*sin_chi)
               vy_ =  vy +  Mn/(Mi + Mn) * (gy*(1-cos_chi) + hy*sin_chi)
@@ -249,24 +252,24 @@ SUBROUTINE PERFORM_ION_NEUTRAL_COLLISION
               vxn_ = vxn - Mi/(Mi + Mn) * (gx*(1-cos_chi) + hx*sin_chi)
               vyn_ = vyn - Mi/(Mi + Mn) * (gy*(1-cos_chi) + hy*sin_chi)
               vzn_ = vzn - Mi/(Mi + Mn) * (gz*(1-cos_chi) + hz*sin_chi)
-      
+
               ! CX: identity switch (50% chance if beta < beta_cx)
-              if ((well_random_number().le.0.5).AND.(beta.LE.beta_cx)) then  
+              if ((well_random_number().le.0.5).AND.(beta.LE.beta_cx)) then
                 CX = .True.
               end if
-    
-            end if  
-    
-    
+
+            end if
+
+
             if (beta.LT.beta0) then ! spiraling motion, VHS (variable hard sphere) model
-              
+
               ! VHS model -> random direction
               theta = acos(1.0 - 2.0*well_random_number())
               phi_ang = 2.0*pi*well_random_number()
               Rx = cos(theta)
               Ry = sin(theta) * cos(phi_ang)
               Rz = sin(theta) * sin(phi_ang)
-              
+
               ! post-collision velocities
               vx_ =  (1/(Mi + Mn)) * (Mi*vx + Mn*vxn - Mn*g*Rx)
               vy_ =  (1/(Mi + Mn)) * (Mi*vy + Mn*vyn - Mn*g*Ry)
@@ -274,13 +277,13 @@ SUBROUTINE PERFORM_ION_NEUTRAL_COLLISION
               vxn_ = (1/(Mi + Mn)) * (Mi*vx + Mn*vxn + Mi*g*Rx)
               vyn_ = (1/(Mi + Mn)) * (Mi*vy + Mn*vyn + Mi*g*Ry)
               vzn_ = (1/(Mi + Mn)) * (Mi*vz + Mn*vzn + Mi*g*Rz)
-    
+
               if (well_random_number().le.0.5) then ! CX: (50% chance when spiraling)
                 CX = .TRUE.
-              end if 
+              end if
 
             end if
-            
+
             ! check if ion and neutral species are the same (via mass)
             ! if not, disable charge exchange after all (ignoring the non-resonant case)
             if (ABS((Mn-Mi)/Mn).GT.0.01) then
@@ -296,26 +299,26 @@ SUBROUTINE PERFORM_ION_NEUTRAL_COLLISION
               ion(s)%part(i)%VY = vy_/V_scale_ms
               ion(s)%part(i)%VZ = vz_/V_scale_ms
             end if
-    
-            ! Check for energy conservation. 
+
+            ! Check for energy conservation.
             E_ratio = (0.5*Mi*(vx_**2+vy_**2+vz_**2) + 0.5*Mn*(vxn_**2 + vyn_**2 + vzn_**2))/(0.5*Mi*(vx**2+vy**2+vz**2) + 0.5*Mn*(vxn**2 + vyn**2 + vzn**2))
             E_ratio_ion = (0.5*Mi*(vx_**2+vy_**2+vz_**2))/(0.5*Mi*(vx**2+vy**2+vz**2))
             if ((E_ratio-1.0).GT.1E-6) then
               PRINT *, "Error in PERFORM_ION_NEUTRAL_COLLISION. Energy not conserved. This should never happen. Energy lost (1-E_before/E_after): ", (1-E_ratio)
-              PRINT *, "Beta: ", beta  
-              PRINT *, "Charge exchange occured?: ", CX  
+              PRINT *, "Beta: ", beta
+              PRINT *, "Charge exchange occured?: ", CX
               CALL MPI_ABORT(MPI_COMM_WORLD, ierr)
             end if
-    
+
             ! check if collision frequency is okay
             if (p_col.GT.0.5) then
               PRINT *, "Error in PERFORM_ION_NEUTRAL_COLLISION. Collision rate too high. Need to use smaller time steps. Collision probability was p_col =  ", p_col
               CALL MPI_ABORT(MPI_COMM_WORLD, ierr)
             end if
-    
+
           end if ! if col
         END DO ! ion loop
       END DO ! neutral species loop
     END DO ! ion species loop
-  
+
   END SUBROUTINE PERFORM_ION_NEUTRAL_COLLISION
