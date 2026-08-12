@@ -126,7 +126,7 @@ SUBROUTINE PERFORM_ION_NEUTRAL_COLLISION
     USE CurrentProblemValues, ONLY : energy_factor_eV, delta_t_s, N_subcycles, V_scale_ms, T_cntr, pi, e_Cl, true_eps_0_Fm, amu_kg, kB_JK, T_e_eV, N_max_vel
     USE rng_wrapper
     !use stdlib_specialfunctions_gamma, only: gamma
-    USE Checkpoints, ONLY use_checkpoint  ! 0/1/2 = don't use / use to continue older run / use to start a new run
+    USE Checkpoints, ONLY : use_checkpoint  ! 0/1/2 = don't use / use to continue older run / use to start a new run
 
     IMPLICIT NONE
     INCLUDE 'mpif.h'
